@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>실시간 설문</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2e3d;
+    --text: #e8eaf0;
+    --muted: #9096a8;
+    --accent: #6366f1;
+    --accent2: #22c55e;
+    --accent3: #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 20px; font-weight: 600; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tab {
+    flex: 1; padding: 12px; text-align: center; cursor: pointer;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--muted); font-weight: 600;
+    transition: all .15s;
+  }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .hidden { display: none; }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  input[type=text] {
+    width: 100%; padding: 12px 14px; font-size: 15px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text); margin-bottom: 16px;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--accent); }
+
+  .q-title { font-size: 22px; font-weight: 600; margin-bottom: 24px; text-align: center; }
+  .opt {
+    display: block; width: 100%; padding: 18px; margin-bottom: 14px;
+    font-size: 17px; text-align: left; cursor: pointer;
+    background: var(--bg); border: 2px solid var(--border);
+    border-radius: 12px; color: var(--text); transition: all .15s;
+  }
+  .opt:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .opt.o1:hover { border-color: var(--accent); }
+  .opt.o2:hover { border-color: var(--accent2); }
+  .opt.o3:hover { border-color: var(--accent3); }
+
+  .btn {
+    padding: 11px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+    background: var(--accent); border: none; border-radius: 10px; color: #fff;
+  }
+  .btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .btn.danger { background: #ef4444; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .bar-label { width: 30%; font-size: 15px; }
+  .bar-track { flex: 1; background: var(--bg); border-radius: 8px; height: 40px; position: relative; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 8px; transition: width .4s ease; min-width: 2px; }
+  .bar-val { width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
+  .total { text-align: center; color: var(--muted); font-size: 14px; margin-top: 12px; }
+  .thanks { text-align: center; font-size: 20px; padding: 40px 0; color: var(--accent2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>실시간 설문</h1>
+  <div class="tabs">
+    <div class="tab active" data-tab="survey">설문 응답</div>
+    <div class="tab" data-tab="results">결과 그래프</div>
+    <div class="tab" data-tab="edit">질문 편집</div>
+  </div>
+
+  <!-- 설문 응답 -->
+  <div id="survey" class="card">
+    <div id="surveyBody"></div>
+  </div>
+
+  <!-- 결과 -->
+  <div id="results" class="card hidden">
+    <div id="resultsBody"></div>
+    <div class="row" style="margin-top:20px;">
+      <button class="btn danger" onclick="resetVotes()">응답 초기화</button>
+    </div>
+  </div>
+
+  <!-- 편집 -->
+  <div id="edit" class="card hidden">
+    <label>질문</label>
+    <input type="text" id="editQ" placeholder="질문을 입력하세요">
+    <label>선택항목 1</label>
+    <input type="text" id="editO1">
+    <label>선택항목 2</label>
+    <input type="text" id="editO2">
+    <label>선택항목 3</label>
+    <input type="text" id="editO3">
+    <button class="btn" onclick="saveEdit()">저장하기</button>
+    <p style="color:var(--muted); font-size:13px; margin-top:12px;">저장하면 기존 응답이 초기화됩니다.</p>
+  </div>
+</div>
+
+<script>
+const colors = ['var(--accent)', 'var(--accent2)', 'var(--accent3)'];
+let state = {
+  question: "이 서비스에 만족하시나요?",
+  options: ["매우 만족", "보통", "불만족"],
+  votes: [0, 0, 0]
+};
+
+// 탭 전환
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    ['survey','results','edit'].forEach(id =>
+      document.getElementById(id).classList.toggle('hidden', id !== t.dataset.tab));
+    if (t.dataset.tab === 'results') renderResults();
+    if (t.dataset.tab === 'edit') loadEdit();
+    if (t.dataset.tab === 'survey') renderSurvey();
+  };
+});
+
+function renderSurvey() {
+  const b = document.getElementById('surveyBody');
+  b.innerHTML = `<div class="q-title">${esc(state.question)}</div>` +
+    state.options.map((o, i) =>
+      `<button class="opt o${i+1}" onclick="vote(${i})">${esc(o)}</button>`).join('');
+}
+
+function vote(i) {
+  state.votes[i]++;
+  document.getElementById('surveyBody').innerHTML =
+    `<div class="thanks">응답이 기록되었습니다 ✓</div>`;
+  setTimeout(renderSurvey, 1200);
+}
+
+function renderResults() {
+  const total = state.votes.reduce((a, b) => a + b, 0);
+  const b = document.getElementById('resultsBody');
+  b.innerHTML = `<div class="q-title">${esc(state.question)}</div>` +
+    state.options.map((o, i) => {
+      const v = state.votes[i];
+      const pct = total ? Math.round(v / total * 100) : 0;
+      return `<div class="bar-row">
+        <div class="bar-label">${esc(o)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${colors[i]}"></div></div>
+        <div class="bar-val">${v} (${pct}%)</div>
+      </div>`;
+    }).join('') +
+    `<div class="total">전체 응답 수: ${total}</div>`;
+}
+
+function loadEdit() {
+  document.getElementById('editQ').value = state.question;
+  document.getElementById('editO1').value = state.options[0];
+  document.getElementById('editO2').value = state.options[1];
+  document.getElementById('editO3').value = state.options[2];
+}
+
+function saveEdit() {
+  const q = document.getElementById('editQ').value.trim();
+  const o = [1,2,3].map(n => document.getElementById('editO'+n).value.trim());
+  if (!q || o.some(x => !x)) { alert('모든 항목을 입력하세요.'); return; }
+  state.question = q;
+  state.options = o;
+  state.votes = [0, 0, 0];
+  alert('저장되었습니다. 응답이 초기화되었습니다.');
+  document.querySelector('.tab[data-tab="survey"]').click();
+}
+
+function resetVotes() {
+  if (confirm('모든 응답을 초기화할까요?')) { state.votes = [0,0,0]; renderResults(); }
+}
+
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+renderSurvey();
+</script>
+</body>
+</html>
